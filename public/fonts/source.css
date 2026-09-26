@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'Berkshire Swash';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./shop.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Jacquarda Bastarda 9';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./pixel.ttf') format('truetype');
+}

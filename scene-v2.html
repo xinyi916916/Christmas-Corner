@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Christmas Corner · Vibe 02</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-warm: #e6d9c4;
+      --ink: #1f1a17;
+      --ink-soft: #5a4f43;
+      --paper: #f6efe2;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      background: var(--bg-warm);
+      color: var(--ink);
+      font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    }
+    #scene { position: fixed; inset: 0; }
+    #scene canvas { display: block; cursor: grab; }
+    #scene canvas:active { cursor: grabbing; }
+    .hud { position: fixed; pointer-events: none; padding: 28px 36px; }
+    .hud > * { pointer-events: auto; }
+    .hud-tl { top: 0; left: 0; max-width: 60%; }
+    .hud-br { bottom: 0; right: 0; text-align: right; }
+    .hud-bc { bottom: 0; left: 0; right: 0; text-align: center; padding-bottom: 22px; }
+    .edition {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+    }
+    h1 {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-weight: 500;
+      font-size: 40px;
+      letter-spacing: -0.01em;
+      margin: 8px 0 4px;
+      font-style: italic;
+      line-height: 1;
+    }
+    .sub { font-size: 14px; color: var(--ink-soft); font-style: italic; margin: 0; }
+    .hint {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.24em;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+    }
+    .hint .dot { display: inline-block; margin: 0 10px; opacity: 0.4; }
+    button.reset {
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--ink-soft);
+      color: var(--ink);
+      padding: 9px 16px;
+      cursor: pointer;
+      border-radius: 999px;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    button.reset:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .tag {
+      display: inline-block;
+      padding: 4px 9px;
+      border: 1px solid var(--ink-soft);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+      margin-bottom: 4px;
+    }
+    .err {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--paper); color: var(--ink); padding: 10px 16px;
+      border: 1px solid var(--ink-soft); font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px; border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="scene"></div>
+  <div class="hud hud-tl">
+    <span class="tag">Vibe · No. 02</span>
+    <h1>Christmas Corner</h1>
+    <p class="sub">A little shop full of winter warmth</p>
+  </div>
+  <div class="hud hud-bc">
+    <p class="hint">Drag<span class="dot">·</span>Scroll<span class="dot">·</span>Pinch</p>
+  </div>
+  <div class="hud hud-br">
+    <button class="reset" id="reset" aria-label="Reset camera view">↺ Reset view</button>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.186.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.186.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    // ---------- Renderer ----------
+    const host = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    host.appendChild(renderer.domElement);
+    renderer.domElement.setAttribute('aria-label', 'Christmas shop 3D miniature. Drag to rotate, scroll to zoom.');
+    renderer.domElement.tabIndex = 0;
+
+    // ---------- Scene ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#e6d9c4');
+    scene.fog = new THREE.Fog('#e6d9c4', 28, 65);
+
+    // ---------- Camera ----------
+    // Position shows front-right of shop, slightly above, so the user sees
+    // the window, door, sign, and lamp on the first frame.
+    const HOME = {
+      pos: new THREE.Vector3(8.5, 5.5, 11.5),
+      target: new THREE.Vector3(-0.5, 1.8, 0.5),
+    };
+    const camera = new THREE.PerspectiveCamera(36, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.copy(HOME.pos);
+
+    // IBL
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // ---------- Controls ----------
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.copy(HOME.target);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.enablePan = false;
+    controls.minDistance = 6.5;
+    controls.maxDistance = 22;
+    controls.minPolarAngle = 0.25;
+    controls.maxPolarAngle = Math.PI * 0.49;
+    // Start with auto-rotate OFF so the first frame is the curated view;
+    // turn it on after the user idles for a few seconds.
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 0.4;
+    controls.update();
+
+    let userInteracted = false;
+    const startIdleRotate = () => { if (userInteracted) controls.autoRotate = true; };
+    const stopRotate = () => { controls.autoRotate = false; userInteracted = true; };
+    renderer.domElement.addEventListener('pointerdown', stopRotate, { passive: true });
+    renderer.domElement.addEventListener('wheel', stopRotate, { passive: true });
+    renderer.domElement.addEventListener('touchstart', stopRotate, { passive: true });
+    renderer.domElement.addEventListener('pointerup', () => setTimeout(startIdleRotate, 5000), { passive: true });
+
+    // ---------- Materials ----------
+    const M = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0, ...extra });
+    const mat = {
+      snow: M('#fff9e9', { roughness: 0.55 }),
+      wood: M('#815036'),
+      trim: M('#a56b3b'),
+      darkWood: M('#523b2d'),
+      wall: M('#c99869'),
+      stone: M('#a7998c'),
+      roof: M('#304d4b'),
+      roof2: M('#3b5853'),
+      green: M('#255340'),
+      red: M('#b93535'),
+      gold: M('#e2b55e', { metalness: 0.4, roughness: 0.4 }),
+      cream: M('#ffe8b9'),
+      trunk: M('#69432e'),
+      glass: M('#c7e8dd', { transparent: true, opacity: 0.22, roughness: 0.1, metalness: 0.4, depthWrite: false }),
+      glow: M('#ffd386', { emissive: '#ffad3e', emissiveIntensity: 1.6 }),
+      ground: M('#cfc0a8', { roughness: 0.95 }),
+      chimney: M('#704030'),
+      chimneyTop: M('#503020'),
+    };
+
+    // ---------- Helpers ----------
+    const root = new THREE.Group();
+    scene.add(root);
+
+    const box = (w, h, d, x, y, z, m, parent = root) => {
+      const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+      o.position.set(x, y, z);
+      o.castShadow = true; o.receiveShadow = true;
+      parent.add(o); return o;
+    };
+    const ball = (r, x, y, z, m, parent = root) => {
+      const o = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), m);
+      o.position.set(x, y, z);
+      o.castShadow = true; o.receiveShadow = true;
+      parent.add(o); return o;
+    };
+    const cone = (rBot, h, x, y, z, m, segs = 16, parent = root) => {
+      const o = new THREE.Mesh(new THREE.ConeGeometry(rBot, h, segs, 1), m);
+      o.position.set(x, y, z);
+      o.castShadow = true; o.receiveShadow = true;
+      parent.add(o); return o;
+    };
+    const cyl = (rTop, rBot, h, x, y, z, m, segs = 24, parent = root) => {
+      const o = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, segs), m);
+      o.position.set(x, y, z);
+      o.castShadow = true; o.receiveShadow = true;
+      parent.add(o); return o;
+    };
+
+    // ---------- Ground (pedestal) ----------
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(8, 8.3, 0.5, 64), mat.ground);
+    pedestal.position.y = 0;
+    pedestal.receiveShadow = true;
+    root.add(pedestal);
+    const snowCap = new THREE.Mesh(new THREE.CylinderGeometry(7.85, 7.85, 0.18, 64), mat.snow);
+    snowCap.position.y = 0.34;
+    snowCap.receiveShadow = true;
+    root.add(snowCap);
+
+    // ---------- The Shop ----------
+    // Local coords: ground = top of snow cap (y = 0.43 world)
+    // Stone base y=0..0.35, walls y=0.35..3.35, eave y ≈ 3.43
+    const shop = new THREE.Group();
+    shop.position.y = 0.43;
+    root.add(shop);
+
+    // Stone base
+    box(4.4, 0.35, 4.4, 0, 0.18, 0, mat.stone, shop);
+
+    // Walls
+    const wallTop = 0.35 + 3.0;
+    box(4.4, 3.0, 0.18, 0, 1.85, -2.11, mat.wall, shop);
+    box(0.18, 3.0, 4.0, -2.11, 1.85, 0.11, mat.wall, shop);
+    box(0.18, 3.0, 4.0,  2.11, 1.85, 0.11, mat.wall, shop);
+    box(4.4, 3.0, 0.18, 0, 1.85,  2.11, mat.wall, shop);
+
+    // Wall trim
+    box(4.55, 0.1, 0.22, 0, 0.35, 2.21, mat.trim, shop);
+    box(4.55, 0.1, 0.22, 0, 0.35, -2.21, mat.trim, shop);
+    box(0.22, 0.1, 4.22, -2.21, 0.35, 0.11, mat.trim, shop);
+    box(0.22, 0.1, 4.22,  2.21, 0.35, 0.11, mat.trim, shop);
+    box(4.55, 0.08, 0.22, 0, wallTop + 0.04, 2.21, mat.darkWood, shop);
+    box(4.55, 0.08, 0.22, 0, wallTop + 0.04, -2.21, mat.darkWood, shop);
+    box(0.22, 0.08, 4.22, -2.21, wallTop + 0.04, 0.11, mat.darkWood, shop);
+    box(0.22, 0.08, 4.22,  2.21, wallTop + 0.04, 0.11, mat.darkWood, shop);
+
+    // ---------- Front: large window (left) + door (right) ----------
+    box(1.7, 1.5, 0.06, -0.9, 2.0, 2.13, mat.darkWood, shop);
+    box(1.55, 1.35, 0.02, -0.9, 2.0, 2.14, mat.glass, shop);
+    box(1.6, 1.4, 0.005, -0.9, 2.0, 2.16, mat.glow, shop);
+    box(0.06, 1.35, 0.02, -0.9, 2.0, 2.155, mat.darkWood, shop);
+    box(1.55, 0.06, 0.02, -0.9, 2.0, 2.155, mat.darkWood, shop);
+    box(1.8, 0.1, 0.22, -0.9, 1.22, 2.2, mat.snow, shop); // snow on sill
+    // Tiny gift boxes in window
+    box(0.18, 0.18, 0.04, -1.15, 1.55, 2.16, mat.red, shop);
+    box(0.18, 0.18, 0.04, -0.7,  1.55, 2.16, mat.green, shop);
+    box(0.18, 0.18, 0.04, -1.0,  1.8,  2.16, mat.gold, shop);
+
+    // Door
+    box(0.95, 1.85, 0.08, 1.0, 1.27, 2.13, mat.darkWood, shop);
+    box(0.78, 1.7, 0.04, 1.0, 1.27, 2.15, mat.wood, shop);
+    box(0.5, 1.4, 0.02, 1.0, 1.27, 2.175, M('#5a3a25'), shop);
+    ball(0.05, 0.78, 1.27, 2.2, mat.gold, shop);
+    box(1.1, 0.1, 0.32, 1.0, 0.4, 2.32, mat.stone, shop);
+    box(1.0, 0.04, 0.28, 1.0, 0.46, 2.32, mat.snow, shop);
+
+    // Awning
+    const awningY = 2.4;
+    box(1.05, 0.04, 0.55, 1.0, awningY, 2.5, mat.red, shop);
+    box(0.04, 0.18, 0.04, 0.52, awningY - 0.11, 2.5, mat.darkWood, shop);
+    box(0.04, 0.18, 0.04, 1.48, awningY - 0.11, 2.5, mat.darkWood, shop);
+    for (let i = 0; i < 5; i++) {
+      const sc = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.14, 4), mat.cream);
+      sc.position.set(0.55 + i * 0.23, awningY - 0.09, 2.76);
+      sc.rotation.x = Math.PI;
+      sc.castShadow = true;
+      shop.add(sc);
+    }
+
+    // Sign above the door
+    const signY = 2.95;
+    box(0.02, 0.3, 0.02, 0.7, signY + 0.1, 2.21, mat.darkWood, shop);
+    box(0.02, 0.3, 0.02, 1.3, signY + 0.1, 2.21, mat.darkWood, shop);
+    box(1.2, 0.5, 0.05, 1.0, signY, 2.15, M('#21443c'), shop);
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = 216;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#21443c'; ctx.fillRect(0, 0, 512, 216);
+    ctx.strokeStyle = '#dfb46d'; ctx.lineWidth = 6; ctx.strokeRect(14, 14, 484, 188);
+    ctx.fillStyle = '#ffdfa2';
+    ctx.font = 'italic 86px "Cormorant Garamond", Georgia, serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Noël', 256, 116);
+    const signTex = new THREE.CanvasTexture(cv);
+    signTex.colorSpace = THREE.SRGBColorSpace;
+    signTex.anisotropy = 4;
+    const signFace = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.42, 0.02),
+      new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.6, emissiveMap: signTex, emissive: '#fff0ca', emissiveIntensity: 0.35 })
+    );
+    signFace.position.set(1.0, signY, 2.18);
+    shop.add(signFace);
+
+    // Side window (left wall)
+    box(0.06, 1.1, 1.3, -2.13, 2.0, 0.1, mat.darkWood, shop);
+    box(0.02, 0.95, 1.15, -2.14, 2.0, 0.1, mat.glass, shop);
+    box(0.01, 0.9, 1.1, -2.145, 2.0, 0.1, mat.glow, shop);
+    box(0.03, 0.95, 0.04, -2.14, 2.0, 0.36, mat.darkWood, shop);
+    box(0.03, 0.95, 0.04, -2.14, 2.0, -0.16, mat.darkWood, shop);
+    box(0.03, 0.04, 1.15, -2.14, 2.0, 0.1, mat.darkWood, shop);
+    box(0.2, 0.18, 1.4, -2.05, 1.4, 0.1, mat.darkWood, shop);
+    box(0.18, 0.06, 1.3, -2.05, 1.5, 0.1, mat.snow, shop);
+    ball(0.06, -2.05, 1.55, -0.25, mat.green, shop);
+    ball(0.06, -2.05, 1.55, 0.4, mat.green, shop);
+
+    // ---------- Roof (proper gable) ----------
+    const roofW = 4.9;
+    const halfD = 2.1;
+    const ridgeH = 1.6;
+    const slopeLen = Math.hypot(halfD, ridgeH);    // ~2.64
+    const slopeAngle = Math.atan2(ridgeH, halfD);  // ~0.65 rad
+    const eaveY = wallTop + 0.08;                  // 3.43
+
+    // Build the gable as a single triangular prism via ExtrudeGeometry.
+    // Shape lies in the XY plane; we extrude along Z to make the prism run along the building's X.
+    // The triangle is the gable cross-section in YZ: (X = ±halfD, Y = 0..ridgeH)
+    // We'll define it in XY and rotate the mesh 90° around Y so its X axis becomes the building's Z.
+    const gableShape = new THREE.Shape();
+    gableShape.moveTo(-halfD - 0.05, 0);
+    gableShape.lineTo(0, ridgeH);
+    gableShape.lineTo(halfD + 0.05, 0);
+    gableShape.closePath();
+
+    function makeGable(material) {
+      const geo = new THREE.ExtrudeGeometry(gableShape, { depth: roofW, bevelEnabled: false, steps: 1 });
+      // Center the extrusion along the local Z axis before rotating
+      geo.translate(0, 0, -roofW / 2);
+      const m = new THREE.Mesh(geo, material);
+      // Rotate so the original +Z (extrusion) becomes the building's +X
+      m.rotation.y = Math.PI / 2;
+      m.castShadow = true; m.receiveShadow = true;
+      return m;
+    }
+    // Front gable (visible from +Z)
+    const gableFront = makeGable(mat.wall);
+    gableFront.position.set(0, eaveY, 2.11);
+    shop.add(gableFront);
+    // Back gable (visible from -Z) — flip so its visible face points -Z
+    const gableBack = makeGable(mat.wall);
+    gableBack.position.set(0, eaveY, -2.11);
+    gableBack.rotation.y = -Math.PI / 2; // mirror so triangle apex still points up
+    shop.add(gableBack);
+
+    // ---------- Roof slabs (two sloped panels) ----------
+    // Slope direction along Z; slab length = slopeLen; thickness along Y.
+    // Position the slab at the midpoint of the slope (midY = eaveY + ridgeH/2, midZ = ±halfD/2).
+    // Rotate around X by +slopeAngle for the +Z side (so the +Z end goes DOWN),
+    // and by -slopeAngle for the -Z side.
+    const midY = eaveY + ridgeH / 2;
+    const roofSlab1 = box(roofW, 0.14, slopeLen, 0, midY,  halfD / 2, mat.roof, shop);
+    roofSlab1.rotation.x =  slopeAngle;
+    const roofSlab2 = box(roofW, 0.14, slopeLen, 0, midY, -halfD / 2, mat.roof2, shop);
+    roofSlab2.rotation.x = -slopeAngle;
+    // Ridge cap
+    box(roofW, 0.08, 0.22, 0, eaveY + ridgeH + 0.04, 0, mat.darkWood, shop);
+
+    // Snow layer on roof — slightly larger, sits just above the slabs
+    const snowSlab1 = new THREE.Mesh(new THREE.BoxGeometry(roofW * 0.95, 0.1, slopeLen * 0.97), mat.snow);
+    snowSlab1.position.set(0, midY + 0.08,  halfD / 2);
+    snowSlab1.rotation.x =  slopeAngle;
+    shop.add(snowSlab1);
+    const snowSlab2 = new THREE.Mesh(new THREE.BoxGeometry(roofW * 0.95, 0.1, slopeLen * 0.97), mat.snow);
+    snowSlab2.position.set(0, midY + 0.08, -halfD / 2);
+    snowSlab2.rotation.x = -slopeAngle;
+    shop.add(snowSlab2);
+
+    // Icicles along front eave
+    for (let i = 0; i < 12; i++) {
+      const ic = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.22 + Math.random() * 0.1, 6), mat.cream);
+      const x = -1.9 + i * (3.8 / 11) + (Math.random() - 0.5) * 0.08;
+      ic.position.set(x, eaveY - 0.05, 2.18);
+      ic.rotation.x = Math.PI;
+      ic.castShadow = true;
+      shop.add(ic);
+    }
+
+    // Chimney (poking through the back roof slab)
+    box(0.35, 0.95, 0.35, 1.55, 4.15, -0.7, mat.chimney, shop);
+    box(0.42, 0.07, 0.42, 1.55, 4.65, -0.7, mat.chimneyTop, shop);
+    box(0.36, 0.06, 0.36, 1.55, 3.95, -0.7, mat.snow, shop);
+
+    // Smoke
+    const smokeParticles = [];
+    for (let i = 0; i < 22; i++) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xeeeeee, transparent: true, opacity: 0, depthWrite: false })
+      );
+      m.position.set(1.55, 4.75, -0.7);
+      m.userData = { phase: i / 22 };
+      shop.add(m);
+      smokeParticles.push(m);
+    }
+
+    // ---------- Pine trees ----------
+    function makeTree(x, z, scale = 1) {
+      const t = new THREE.Group();
+      t.position.set(x, 0.43, z);
+      t.scale.setScalar(scale);
+      cyl(0.08, 0.1, 0.3, 0, 0.15, 0, mat.trunk, 12, t);
+      cone(0.55, 0.7, 0, 0.55, 0, mat.green, 16, t);
+      cone(0.45, 0.6, 0, 0.95, 0, mat.green, 16, t);
+      cone(0.32, 0.5, 0, 1.3, 0, mat.green, 16, t);
+      ball(0.32, 0, 0.85, 0, mat.snow, t);
+      ball(0.25, 0, 1.2, 0, mat.snow, t);
+      ball(0.18, 0, 1.5, 0, mat.snow, t);
+      root.add(t);
+      return t;
+    }
+    // Place trees to be visible in the default front-right camera view
+    makeTree(-4.6,  2.8, 1.0);
+    makeTree( 3.6,  3.8, 0.85);
+    makeTree(-3.6, -3.4, 0.95);
+    makeTree( 4.2, -2.4, 0.75);
+    makeTree( 0.5,  4.6, 0.6);  // a small one near the front
+
+    // ---------- Lamppost ----------
+    const lamp = new THREE.Group();
+    lamp.position.set(3.2, 0.43, 3.4);
+    cyl(0.05, 0.08, 2.3, 0, 1.15, 0, mat.darkWood, 12, lamp);
+    box(0.04, 0.04, 0.45, 0, 2.3, 0.22, mat.darkWood, lamp);
+    const shade = new THREE.Mesh(
+      new THREE.ConeGeometry(0.18, 0.22, 16, 1, true),
+      new THREE.MeshStandardMaterial({ color: '#3a2a1a', side: THREE.DoubleSide, roughness: 0.7 })
+    );
+    shade.position.set(0, 2.36, 0.42);
+    shade.rotation.x = Math.PI;
+    lamp.add(shade);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 16, 16),
+      new THREE.MeshStandardMaterial({ color: '#fff0c8', emissive: '#ffb060', emissiveIntensity: 2.4 })
+    );
+    bulb.position.set(0, 2.22, 0.42);
+    lamp.add(bulb);
+    cyl(0.15, 0.18, 0.1, 0, 0.05, 0, mat.stone, 16, lamp);
+    root.add(lamp);
+
+    const lampLight = new THREE.PointLight('#ffb060', 2.0, 7, 2);
+    lampLight.position.set(3.2, 2.7, 3.85);
+    scene.add(lampLight);
+
+    // ---------- Lighting ----------
+    const hemi = new THREE.HemisphereLight('#fff3dc', '#8a7a64', 0.6);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight('#ffe1b5', 2.0);
+    sun.position.set(-6, 12, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 0.5, far: 30 });
+    sun.shadow.normalBias = 0.03;
+    sun.shadow.bias = -0.0002;
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight('#dbeaff', 0.5);
+    fill.position.set(5, 5, -6);
+    scene.add(fill);
+
+    const winLight = new THREE.PointLight('#ffb060', 1.2, 5, 2);
+    winLight.position.set(-0.9, 2.0, 1.5);
+    scene.add(winLight);
+    const sideWinLight = new THREE.PointLight('#ffb060', 0.7, 4, 2);
+    sideWinLight.position.set(-1.5, 2.0, 0.1);
+    scene.add(sideWinLight);
+
+    // ---------- Falling snow ----------
+    const SNOW = 320;
+    const sgeo = new THREE.BufferGeometry();
+    const spos = new Float32Array(SNOW * 3);
+    const svel = new Float32Array(SNOW);
+    for (let i = 0; i < SNOW; i++) {
+      spos[i * 3]     = (Math.random() - 0.5) * 16;
+      spos[i * 3 + 1] = Math.random() * 9;
+      spos[i * 3 + 2] = (Math.random() - 0.5) * 16;
+      svel[i] = 0.005 + Math.random() * 0.01;
+    }
+    sgeo.setAttribute('position', new THREE.BufferAttribute(spos, 3));
+    const spts = new THREE.Points(sgeo, new THREE.PointsMaterial({
+      color: 0xfff9e9, size: 0.045, transparent: true, opacity: 0.85,
+      depthWrite: false, sizeAttenuation: true
+    }));
+    scene.add(spts);
+
+    // ---------- Reset / Resize ----------
+    document.getElementById('reset').addEventListener('click', () => {
+      camera.position.copy(HOME.pos);
+      controls.target.copy(HOME.target);
+      controls.update();
+      userInteracted = false;
+      controls.autoRotate = false;
+    });
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ---------- Animate ----------
+    const clock = new THREE.Clock();
+    function tick() {
+      const t = clock.getElapsedTime();
+      // Smoke
+      for (let i = 0; i < smokeParticles.length; i++) {
+        const p = smokeParticles[i];
+        const ph = (t * 0.22 + p.userData.phase) % 1;
+        p.position.y = 4.75 + ph * 3.0;
+        p.position.x = 1.55 + Math.sin(ph * 5 + i) * 0.12;
+        p.position.z = -0.7 + Math.cos(ph * 4) * 0.12;
+        p.material.opacity = (1 - ph) * 0.5;
+        p.scale.setScalar(1 + ph * 2.2);
+      }
+      // Snow drift
+      const arr = spts.geometry.attributes.position.array;
+      for (let i = 0; i < SNOW; i++) {
+        arr[i * 3 + 1] -= svel[i];
+        arr[i * 3] += Math.sin(t * 0.6 + i) * 0.0008;
+        if (arr[i * 3 + 1] < 0) {
+          arr[i * 3 + 1] = 8.5;
+          arr[i * 3] = (Math.random() - 0.5) * 16;
+          arr[i * 3 + 2] = (Math.random() - 0.5) * 16;
+        }
+      }
+      spts.geometry.attributes.position.needsUpdate = true;
+
+      controls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    window.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      const err = document.createElement('div');
+      err.className = 'err';
+      err.textContent = 'WebGL context lost. Try reloading the page.';
+      document.body.appendChild(err);
+    });
+  </script>
+</body>
+</html>
